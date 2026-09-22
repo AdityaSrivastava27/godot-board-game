@@ -1,0 +1,10 @@
+- Snake remembers the column direction of the step it last took
+- Snake's next step must run the other way along the columns
+- Snake's row direction left free, so both diagonals in the required column direction are offered
+- Snake that has not moved yet may take any of its four diagonals
+- After F2 → E3 the Snake is offered D2 and F2
+- After E3 → D2 the Snake is offered C3 and E3
+- Snake may step back onto the cell it just came from
+- Lion and Rabbit movement unaffected
+- Board bounds, friendly blocking and capture still applied to the Snake's narrowed steps
+- Status line naming the direction a Snake that has already moved must step
