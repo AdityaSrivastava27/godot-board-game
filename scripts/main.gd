@@ -96,6 +96,13 @@ func _on_piece_picked(piece: PieceView) -> void:
 	if piece == _selected:
 		_clear_selection()
 		return
+	# A capturing click never reaches _on_cell_clicked: the piece being taken
+	# covers its cell and consumes the event, so the capture has to be recognised
+	# here too. Anything standing on a destination is an opponent, because
+	# legal_destinations() has already dropped the mover's own pieces.
+	if _selected != null and _destinations.has(piece.coordinate):
+		_move_selected_to(piece.coordinate)
+		return
 	_select(piece)
 
 
