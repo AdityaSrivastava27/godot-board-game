@@ -1,14 +1,26 @@
 extends Control
 
-## Builds the board and places the six pieces on their starting cells.
-## Rules 1-3 only: this scene is the starting position, it carries no
-## movement, capture or turn logic because no such rules are defined.
+## Builds the board, places the six pieces on their starting cells and lets a
+## piece be picked up and moved according to its movement rule.
+##
+## Click a piece to select it; its legal destinations are marked on the board.
+## Click one of them to move there, or click anywhere else to deselect.
+##
+## The specification defines movement geometry only, so there is deliberately no
+## turn order, capture or win condition here: any piece may be moved at any time,
+## and an occupied cell is never offered as a destination.
 
 const BACKGROUND := Color("#241a12")
 const HEADING_COLOR := Color("#f3e7cd")
 const NOTE_COLOR := Color("#b39d7d")
+const MOVE_DURATION := 0.16
 
 var _board: BoardView
+var _status: Label
+var _selected: PieceView = null
+var _destinations: Array[Vector2i] = []
+## Cell -> PieceView for every piece on the board.
+var _occupancy := {}
 
 
 func _ready() -> void:
@@ -23,25 +35,32 @@ func _ready() -> void:
 	add_child(center)
 
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 18)
+	column.add_theme_constant_override("separation", 16)
 	column.alignment = BoxContainer.ALIGNMENT_CENTER
 	center.add_child(column)
 
-	column.add_child(_make_label("6 × 6 Board — Starting Position", 26, HEADING_COLOR))
+	column.add_child(_make_label("6 × 6 Board", 26, HEADING_COLOR))
 
 	_board = BoardView.new()
 	_board.cell_size = 92.0
 	_board.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_board.cell_clicked.connect(_on_cell_clicked)
 	column.add_child(_board)
 
 	_place_starting_pieces()
 
+	_status = _make_label("", 17, HEADING_COLOR)
+	column.add_child(_status)
 	column.add_child(_make_legend())
 	column.add_child(
 		_make_label(
-			"Rows A–F read upwards on the left, columns 1–6 read across the bottom.", 15, NOTE_COLOR
+			"Lion: one cell any direction.  Rabbit: two cells straight.  Snake: one cell diagonally.",
+			15,
+			NOTE_COLOR
 		)
 	)
+
+	_clear_selection()
 
 
 ## Rule 3 - each piece is instantiated on the cell named in the rules.
@@ -54,12 +73,84 @@ func _place_starting_pieces() -> void:
 
 		var piece := PieceView.new()
 		piece.setup(entry["player"], entry["kind"])
-		piece.mouse_filter = Control.MOUSE_FILTER_PASS
+		piece.picked.connect(_on_piece_picked)
 		_board.add_child(piece)
 
 		var rect := _board.cell_rect(coordinate)
 		piece.position = rect.position
 		piece.size = rect.size
+		piece.coordinate = coordinate
+		_occupancy[coordinate] = piece
+
+
+func _on_piece_picked(piece: PieceView) -> void:
+	# Clicking the selected piece again puts it back down.
+	if piece == _selected:
+		_clear_selection()
+		return
+	_select(piece)
+
+
+func _on_cell_clicked(coordinate: Vector2i) -> void:
+	if _selected == null:
+		return
+	if _destinations.has(coordinate):
+		_move_selected_to(coordinate)
+	else:
+		_clear_selection()
+
+
+func _select(piece: PieceView) -> void:
+	_selected = piece
+	_destinations = MovementRules.legal_destinations(piece.kind, piece.coordinate, _occupancy)
+	_board.show_selection(piece.coordinate, _destinations)
+
+	var description := "%s %s on %s" % [
+		BoardData.player_name(piece.player),
+		BoardData.kind_name(piece.kind),
+		BoardData.cell_name(piece.coordinate),
+	]
+	if _destinations.is_empty():
+		_status.text = "%s has no legal move." % description
+	else:
+		_status.text = "%s can move to %s." % [description, _cell_list(_destinations)]
+
+
+func _move_selected_to(coordinate: Vector2i) -> void:
+	var piece := _selected
+	var from := piece.coordinate
+
+	_occupancy.erase(from)
+	_occupancy[coordinate] = piece
+	piece.coordinate = coordinate
+
+	var tween := create_tween()
+	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(piece, "position", _board.cell_rect(coordinate).position, MOVE_DURATION)
+
+	_selected = null
+	_destinations = []
+	_board.clear_selection()
+	_status.text = "%s %s moved %s → %s." % [
+		BoardData.player_name(piece.player),
+		BoardData.kind_name(piece.kind),
+		BoardData.cell_name(from),
+		BoardData.cell_name(coordinate),
+	]
+
+
+func _clear_selection() -> void:
+	_selected = null
+	_destinations = []
+	_board.clear_selection()
+	_status.text = "Click a piece to see where it can move."
+
+
+func _cell_list(cells: Array[Vector2i]) -> String:
+	var names := PackedStringArray()
+	for cell: Vector2i in cells:
+		names.append(BoardData.cell_name(cell))
+	return ", ".join(names)
 
 
 func _make_legend() -> Control:
@@ -76,6 +167,7 @@ func _make_legend() -> Control:
 		]:
 			var swatch := PieceView.new()
 			swatch.custom_minimum_size = Vector2(46.0, 46.0)
+			swatch.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			swatch.setup(player, kind)
 			group.add_child(swatch)
 			group.add_child(_make_label(BoardData.kind_name(kind), 15, NOTE_COLOR))

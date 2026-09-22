@@ -5,6 +5,8 @@ extends Control
 ## visually distinguishable, so ownership is carried by the disc colour
 ## while the animal is carried by the mark drawn on top of it.
 
+signal picked(piece: PieceView)
+
 const PLAYER_1_BODY := Color("#e8a33d")
 const PLAYER_1_EDGE := Color("#5a3208")
 const PLAYER_1_MARK := Color("#3a2006")
@@ -15,6 +17,8 @@ const PLAYER_2_MARK := Color("#eaf2fb")
 
 var player: int = BoardData.Player.PLAYER_1
 var kind: int = BoardData.PieceKind.LION
+## The cell this piece stands on, as (column index, row index).
+var coordinate := Vector2i(-1, -1)
 
 
 func setup(owning_player: int, piece_kind: int) -> void:
@@ -22,6 +26,14 @@ func setup(owning_player: int, piece_kind: int) -> void:
 	kind = piece_kind
 	tooltip_text = "%s %s" % [BoardData.player_name(player), BoardData.kind_name(kind)]
 	queue_redraw()
+
+
+func _gui_input(event: InputEvent) -> void:
+	var button := event as InputEventMouseButton
+	if button == null or not button.pressed or button.button_index != MOUSE_BUTTON_LEFT:
+		return
+	picked.emit(self)
+	accept_event()
 
 
 func _draw() -> void:
