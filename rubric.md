@@ -1,0 +1,10 @@
+- Lion moves exactly one cell horizontally, vertically or diagonally
+- Rabbit moves exactly two cells horizontally or vertically, never diagonally
+- Snake moves exactly one cell diagonally, never horizontally or vertically
+- Moves off the board are excluded
+- Cells already holding a piece are excluded as destinations
+- Click a piece to select it, click it again to deselect
+- Legal destinations highlighted on the board while a piece is selected
+- Click a highlighted cell to move there, click elsewhere to deselect
+- Moving piece tweened to its new cell
+- Status line naming the selected piece, its cell, its legal destinations, and the last move
