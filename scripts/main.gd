@@ -13,16 +13,23 @@ extends Control
 ## A Snake carries the direction of its last step, so the cells offered to it
 ## change after every move it makes.
 ##
-## The specification stops at turn order, so there is deliberately no win
-## condition here: the two players simply keep alternating.
+## Rule 8 - The game ends the instant a Lion is captured and the player who
+## captured it wins; it is drawn when both sides are down to their Lion alone,
+## when the same position arises for the third time, or when thirty moves pass
+## with no capture. The result is announced above the board, and once it is
+## shown the board stops accepting clicks.
 
 const BACKGROUND := Color("#241a12")
 const HEADING_COLOR := Color("#f3e7cd")
 const NOTE_COLOR := Color("#b39d7d")
 const MOVE_DURATION := 0.16
+## Rule 8 - the colour a drawn result is announced in. A win is announced in the
+## winning player's own colour instead.
+const DRAW_COLOR := Color("#f2c14e")
 
 var _board: BoardView
 var _turn: Label
+var _result: Label
 var _status: Label
 var _selected: PieceView = null
 var _destinations: Array[Vector2i] = []
@@ -30,6 +37,13 @@ var _destinations: Array[Vector2i] = []
 var _occupancy := {}
 ## Rule 7 - the player whose turn it is; only their pieces may be picked up.
 var _active_player: int = BoardData.Player.PLAYER_1
+## Rule 8 - how often each position has been reached, keyed by
+## EndConditions.position_key. The third visit to one ends the game in a draw.
+var _position_counts := {}
+## Rule 8 - moves made since the last capture, counting both players' moves.
+var _moves_since_capture := 0
+## Rule 8 - set once a result is in; no piece may be moved afterwards.
+var _game_over := false
 
 
 func _ready() -> void:
@@ -55,6 +69,13 @@ func _ready() -> void:
 	_turn = _make_label("", 19, HEADING_COLOR)
 	column.add_child(_turn)
 
+	# Rule 8 - the result goes directly under the turn label, where the players
+	# are already looking. It holds its height while the game runs so that
+	# announcing the result does not shift the board.
+	_result = _make_label("", 21, DRAW_COLOR)
+	_result.custom_minimum_size = Vector2(0.0, 28.0)
+	column.add_child(_result)
+
 	_board = BoardView.new()
 	_board.cell_size = 92.0
 	_board.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -62,6 +83,8 @@ func _ready() -> void:
 	column.add_child(_board)
 
 	_place_starting_pieces()
+	# Rule 8 - the opening position counts as the first occurrence of itself.
+	_record_position(BoardData.Player.PLAYER_1)
 
 	_status = _make_label("", 17, HEADING_COLOR)
 	column.add_child(_status)
@@ -77,6 +100,14 @@ func _ready() -> void:
 	column.add_child(
 		_make_label(
 			"Your own pieces block you; moving onto an opponent's piece captures it.",
+			15,
+			NOTE_COLOR
+		)
+	)
+	column.add_child(
+		_make_label(
+			"Capturing a Lion wins the game.  Two lone Lions, a position seen three "
+			+ "times, or 30 moves without a capture is a draw.",
 			15,
 			NOTE_COLOR
 		)
@@ -108,6 +139,9 @@ func _place_starting_pieces() -> void:
 
 
 func _on_piece_picked(piece: PieceView) -> void:
+	# Rule 8 - nothing may be moved once a result is in.
+	if _game_over:
+		return
 	# Clicking the selected piece again puts it back down.
 	if piece == _selected:
 		_clear_selection()
@@ -135,7 +169,8 @@ func _on_piece_picked(piece: PieceView) -> void:
 
 
 func _on_cell_clicked(coordinate: Vector2i) -> void:
-	if _selected == null:
+	# Rule 8 - nothing may be moved once a result is in.
+	if _game_over or _selected == null:
 		return
 	if _destinations.has(coordinate):
 		_move_selected_to(coordinate)
@@ -211,10 +246,28 @@ func _move_selected_to(coordinate: Vector2i) -> void:
 			BoardData.kind_name(captured.kind),
 		]
 
+	# Rule 8 - a capture restarts the no-capture clock; any other move advances
+	# it. The move just made is one of the thirty.
+	_moves_since_capture = 0 if captured != null else _moves_since_capture + 1
+
+	# Rule 8 - the position that repeats is the one the next player faces, so it
+	# is recorded under their name before the result is worked out.
+	var next_player := _opponent_of(piece.player)
+	var outcome := EndConditions.evaluate(
+		_occupancy,
+		captured,
+		piece.player,
+		_record_position(next_player),
+		_moves_since_capture
+	)
+	if outcome["kind"] != EndConditions.Kind.NONE:
+		_end_game(outcome)
+		return
+
 	# Rule 7 - the move is complete, so the turn passes to the other player. The
 	# status line goes on describing the move that was just made; the label above
 	# the board is what announces the handover.
-	_begin_turn(_opponent_of(piece.player))
+	_begin_turn(next_player)
 
 
 ## Rule 5 - a captured piece leaves the board. It fades out over the same beat as
@@ -224,6 +277,39 @@ func _remove_captured(piece: PieceView) -> void:
 	var fade := create_tween()
 	fade.tween_property(piece, "modulate:a", 0.0, MOVE_DURATION)
 	fade.tween_callback(piece.queue_free)
+
+
+## Rule 8 - count the position now on the board, which `player_to_move` is about
+## to play from, and return how many times it has been reached, this time
+## included.
+func _record_position(player_to_move: int) -> int:
+	var key := EndConditions.position_key(_occupancy, player_to_move)
+	var count: int = int(_position_counts.get(key, 0)) + 1
+	_position_counts[key] = count
+	return count
+
+
+## Rule 8 - announce `outcome` and close the game down. The status line is left
+## holding the move that ended it, so the two lines read together as the result
+## and the move that brought it about.
+func _end_game(outcome: Dictionary) -> void:
+	_game_over = true
+	_selected = null
+	_destinations = []
+	_board.clear_selection()
+
+	_turn.text = "Game over"
+	_turn.add_theme_color_override("font_color", HEADING_COLOR)
+
+	_result.text = outcome["text"]
+	var color := DRAW_COLOR
+	if outcome["kind"] == EndConditions.Kind.WIN:
+		color = (
+			PieceView.PLAYER_1_BODY
+			if outcome["winner"] == BoardData.Player.PLAYER_1
+			else PieceView.PLAYER_2_BODY
+		)
+	_result.add_theme_color_override("font_color", color)
 
 
 ## Rule 7 - hand the turn to `player`, who becomes the only side that can pick a
