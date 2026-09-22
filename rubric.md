@@ -1,0 +1,7 @@
+- A cell holding an opponent's piece is offered as a destination
+- Moving onto an opponent's piece removes it from the board
+- Capturing destinations marked apart from empty ones while a piece is selected
+- Clicking the opponent's piece standing on a capturing destination performs the capture
+- Status line naming which destinations would capture while a piece is selected
+- Status line naming the captured piece after the move
+- Captured piece removed visibly as the move lands, with the mover drawn in front of it
