@@ -7,6 +7,9 @@ extends Control
 ## with the ones that would capture an opponent's piece outlined in red.
 ## Click a destination to move there, or click anywhere else to deselect.
 ##
+## A Snake carries the direction of its last step, so the cells offered to it
+## change after every move it makes.
+##
 ## The specification defines movement, blocking and capture only, so there is
 ## deliberately no turn order or win condition here: any piece may be moved at
 ## any time.
@@ -55,7 +58,8 @@ func _ready() -> void:
 	column.add_child(_make_legend())
 	column.add_child(
 		_make_label(
-			"Lion: one cell any direction.  Rabbit: two cells straight.  Snake: one cell diagonally.",
+			"Lion: one cell any direction.  Rabbit: two cells straight.  "
+			+ "Snake: one cell diagonally, alternating left and right.",
 			15,
 			NOTE_COLOR
 		)
@@ -118,7 +122,7 @@ func _on_cell_clicked(coordinate: Vector2i) -> void:
 func _select(piece: PieceView) -> void:
 	_selected = piece
 	_destinations = MovementRules.legal_destinations(
-		piece.kind, piece.player, piece.coordinate, _occupancy
+		piece.kind, piece.player, piece.coordinate, _occupancy, piece.last_step
 	)
 	var captures := MovementRules.captures_among(_destinations, _occupancy)
 	_board.show_selection(piece.coordinate, _destinations, captures)
@@ -128,6 +132,11 @@ func _select(piece: PieceView) -> void:
 		BoardData.kind_name(piece.kind),
 		BoardData.cell_name(piece.coordinate),
 	]
+	# Rule 6 - a Snake's next step depends on its last one, which nothing on the
+	# board shows, so name the direction it is obliged to take.
+	if piece.kind == BoardData.PieceKind.SNAKE and piece.last_step.x != 0:
+		var must_step := "left" if piece.last_step.x > 0 else "right"
+		description += " (zig-zag, must step %s)" % must_step
 	if _destinations.is_empty():
 		_status.text = "%s has no legal move." % description
 	elif captures.is_empty():
@@ -147,6 +156,8 @@ func _move_selected_to(coordinate: Vector2i) -> void:
 	_occupancy.erase(from)
 	_occupancy[coordinate] = piece
 	piece.coordinate = coordinate
+	# Rule 6 - remembered so the Snake's next step can zig the other way.
+	piece.last_step = coordinate - from
 	# Keep the mover in front of the piece it is landing on while both are on screen.
 	_board.move_child(piece, -1)
 	if captured != null:

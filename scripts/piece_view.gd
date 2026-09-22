@@ -19,6 +19,9 @@ var player: int = BoardData.Player.PLAYER_1
 var kind: int = BoardData.PieceKind.LION
 ## The cell this piece stands on, as (column index, row index).
 var coordinate := Vector2i(-1, -1)
+## The (column, row) step this piece last moved by, Vector2i.ZERO before its
+## first move. Rule 6 reads the column part of it to zig-zag the Snake.
+var last_step := Vector2i.ZERO
 
 
 func setup(owning_player: int, piece_kind: int) -> void:

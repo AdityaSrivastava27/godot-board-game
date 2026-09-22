@@ -7,6 +7,11 @@ extends RefCounted
 ## Rule 5 - Blocking and capture. A cell held by a piece of the moving player's
 ## own side is never a legal destination. A cell held by an opponent's piece is,
 ## and landing on it removes that piece from the board.
+##
+## Rule 6 - Zig-zag. The Snake remembers the column direction of the step it
+## last took, and its next step has to run the other way along the columns. The
+## row direction stays free, so every step is still a plain diagonal; a Snake
+## that has not moved yet may take any of the four.
 
 ## Lion: exactly one cell horizontally, vertically or diagonally.
 const LION_STEPS: Array[Vector2i] = [
@@ -48,6 +53,20 @@ static func steps_for(kind: int) -> Array[Vector2i]:
 	return []
 
 
+## The steps a piece of this `kind` may take given `last_step`, the step it last
+## moved by (Vector2i.ZERO before its first move). Only the Snake is narrowed:
+## Rule 6 keeps the two steps whose column direction opposes its last one.
+static func steps_for_state(kind: int, last_step: Vector2i) -> Array[Vector2i]:
+	var steps := steps_for(kind)
+	if kind != BoardData.PieceKind.SNAKE or last_step.x == 0:
+		return steps
+	var zigzag: Array[Vector2i] = []
+	for step: Vector2i in steps:
+		if step.x == -last_step.x:
+			zigzag.append(step)
+	return zigzag
+
+
 static func is_on_board(coordinate: Vector2i) -> bool:
 	return (
 		coordinate.x >= 0
@@ -60,12 +79,18 @@ static func is_on_board(coordinate: Vector2i) -> bool:
 ## Every cell a `player`'s piece of this `kind` may move to from `from`, in board
 ## order. `occupied` maps Vector2i cell -> PieceView; cells holding one of the
 ## player's own pieces are dropped, cells holding an opponent's piece are kept
-## because moving there is a capture.
+## because moving there is a capture. `last_step` is the step this piece last
+## moved by, which drives the Snake's zig-zag; leave it out for a piece that has
+## not moved.
 static func legal_destinations(
-	kind: int, player: int, from: Vector2i, occupied: Dictionary
+	kind: int,
+	player: int,
+	from: Vector2i,
+	occupied: Dictionary,
+	last_step := Vector2i.ZERO
 ) -> Array[Vector2i]:
 	var destinations: Array[Vector2i] = []
-	for step: Vector2i in steps_for(kind):
+	for step: Vector2i in steps_for_state(kind, last_step):
 		var target := from + step
 		if not is_on_board(target):
 			continue
