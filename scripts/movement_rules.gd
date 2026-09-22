@@ -2,9 +2,11 @@ class_name MovementRules
 extends RefCounted
 
 ## Rule 4 - Piece movement. Each kind has a fixed set of offsets it may move by,
-## measured in (column, row) steps. Nothing else is defined: there is no capture,
-## no stacking and no turn order in the specification, so a destination already
-## holding a piece is simply not offered.
+## measured in (column, row) steps.
+##
+## Rule 5 - Blocking and capture. A cell held by a piece of the moving player's
+## own side is never a legal destination. A cell held by an opponent's piece is,
+## and landing on it removes that piece from the board.
 
 ## Lion: exactly one cell horizontally, vertically or diagonally.
 const LION_STEPS: Array[Vector2i] = [
@@ -55,20 +57,37 @@ static func is_on_board(coordinate: Vector2i) -> bool:
 	)
 
 
-## Every cell the piece may move to from `from`, in board order.
-## `occupied` maps Vector2i cell -> piece; its keys are excluded, because with no
-## capture or stacking rule defined a cell can only ever hold one piece.
-static func legal_destinations(kind: int, from: Vector2i, occupied: Dictionary) -> Array[Vector2i]:
+## Every cell a `player`'s piece of this `kind` may move to from `from`, in board
+## order. `occupied` maps Vector2i cell -> PieceView; cells holding one of the
+## player's own pieces are dropped, cells holding an opponent's piece are kept
+## because moving there is a capture.
+static func legal_destinations(
+	kind: int, player: int, from: Vector2i, occupied: Dictionary
+) -> Array[Vector2i]:
 	var destinations: Array[Vector2i] = []
 	for step: Vector2i in steps_for(kind):
 		var target := from + step
 		if not is_on_board(target):
 			continue
-		if occupied.has(target):
+		var blocker: PieceView = occupied.get(target)
+		if blocker != null and blocker.player == player:
 			continue
 		destinations.append(target)
 	destinations.sort_custom(_before)
 	return destinations
+
+
+## The subset of `destinations` that is occupied, i.e. that a move would capture.
+## Only opponents' pieces can appear here: `legal_destinations` has already
+## dropped every cell held by the moving player's own side.
+static func captures_among(
+	destinations: Array[Vector2i], occupied: Dictionary
+) -> Array[Vector2i]:
+	var captures: Array[Vector2i] = []
+	for cell: Vector2i in destinations:
+		if occupied.has(cell):
+			captures.append(cell)
+	return captures
 
 
 ## Board order: bottom row first, then left to right within a row.

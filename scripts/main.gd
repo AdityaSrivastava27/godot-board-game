@@ -3,12 +3,13 @@ extends Control
 ## Builds the board, places the six pieces on their starting cells and lets a
 ## piece be picked up and moved according to its movement rule.
 ##
-## Click a piece to select it; its legal destinations are marked on the board.
-## Click one of them to move there, or click anywhere else to deselect.
+## Click a piece to select it; its legal destinations are marked on the board,
+## with the ones that would capture an opponent's piece outlined in red.
+## Click a destination to move there, or click anywhere else to deselect.
 ##
-## The specification defines movement geometry only, so there is deliberately no
-## turn order, capture or win condition here: any piece may be moved at any time,
-## and an occupied cell is never offered as a destination.
+## The specification defines movement, blocking and capture only, so there is
+## deliberately no turn order or win condition here: any piece may be moved at
+## any time.
 
 const BACKGROUND := Color("#241a12")
 const HEADING_COLOR := Color("#f3e7cd")
@@ -59,6 +60,13 @@ func _ready() -> void:
 			NOTE_COLOR
 		)
 	)
+	column.add_child(
+		_make_label(
+			"Your own pieces block you; moving onto an opponent's piece captures it.",
+			15,
+			NOTE_COLOR
+		)
+	)
 
 	_clear_selection()
 
@@ -102,8 +110,11 @@ func _on_cell_clicked(coordinate: Vector2i) -> void:
 
 func _select(piece: PieceView) -> void:
 	_selected = piece
-	_destinations = MovementRules.legal_destinations(piece.kind, piece.coordinate, _occupancy)
-	_board.show_selection(piece.coordinate, _destinations)
+	_destinations = MovementRules.legal_destinations(
+		piece.kind, piece.player, piece.coordinate, _occupancy
+	)
+	var captures := MovementRules.captures_among(_destinations, _occupancy)
+	_board.show_selection(piece.coordinate, _destinations, captures)
 
 	var description := "%s %s on %s" % [
 		BoardData.player_name(piece.player),
@@ -112,17 +123,27 @@ func _select(piece: PieceView) -> void:
 	]
 	if _destinations.is_empty():
 		_status.text = "%s has no legal move." % description
-	else:
+	elif captures.is_empty():
 		_status.text = "%s can move to %s." % [description, _cell_list(_destinations)]
+	else:
+		_status.text = "%s can move to %s, capturing on %s." % [
+			description, _cell_list(_destinations), _cell_list(captures)
+		]
 
 
 func _move_selected_to(coordinate: Vector2i) -> void:
 	var piece := _selected
 	var from := piece.coordinate
+	# Rule 5 - the destination may hold an opponent's piece, which this move removes.
+	var captured: PieceView = _occupancy.get(coordinate)
 
 	_occupancy.erase(from)
 	_occupancy[coordinate] = piece
 	piece.coordinate = coordinate
+	# Keep the mover in front of the piece it is landing on while both are on screen.
+	_board.move_child(piece, -1)
+	if captured != null:
+		_remove_captured(captured)
 
 	var tween := create_tween()
 	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
@@ -131,12 +152,29 @@ func _move_selected_to(coordinate: Vector2i) -> void:
 	_selected = null
 	_destinations = []
 	_board.clear_selection()
-	_status.text = "%s %s moved %s → %s." % [
+	var move_text := "%s %s moved %s → %s" % [
 		BoardData.player_name(piece.player),
 		BoardData.kind_name(piece.kind),
 		BoardData.cell_name(from),
 		BoardData.cell_name(coordinate),
 	]
+	if captured == null:
+		_status.text = move_text + "."
+	else:
+		_status.text = "%s and captured %s %s." % [
+			move_text,
+			BoardData.player_name(captured.player),
+			BoardData.kind_name(captured.kind),
+		]
+
+
+## Rule 5 - a captured piece leaves the board. It fades out over the same beat as
+## the move, so the two read as one action.
+func _remove_captured(piece: PieceView) -> void:
+	piece.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var fade := create_tween()
+	fade.tween_property(piece, "modulate:a", 0.0, MOVE_DURATION)
+	fade.tween_callback(piece.queue_free)
 
 
 func _clear_selection() -> void:

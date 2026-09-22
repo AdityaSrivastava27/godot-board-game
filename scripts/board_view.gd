@@ -16,6 +16,7 @@ const FRAME := Color("#3f2b19")
 const LABEL_COLOR := Color("#ead9b8")
 const SELECTION_COLOR := Color("#f2c14e")
 const DESTINATION_COLOR := Color("#5fae6d")
+const CAPTURE_COLOR := Color("#c0483a")
 
 @export var cell_size: float = 96.0:
 	set(value):
@@ -33,6 +34,8 @@ const DESTINATION_COLOR := Color("#5fae6d")
 
 var selected_cell := Vector2i(-1, -1)
 var destination_cells: Array[Vector2i] = []
+## The destinations that hold an opponent's piece, marked apart from the rest.
+var capture_cells: Array[Vector2i] = []
 
 
 func _ready() -> void:
@@ -71,14 +74,17 @@ func cell_at_position(point: Vector2) -> Vector2i:
 	return Vector2i(int(local.x / cell_size), BoardData.SIZE - 1 - int(local.y / cell_size))
 
 
-func show_selection(cell: Vector2i, destinations: Array[Vector2i]) -> void:
+func show_selection(
+	cell: Vector2i, destinations: Array[Vector2i], captures: Array[Vector2i]
+) -> void:
 	selected_cell = cell
 	destination_cells = destinations
+	capture_cells = captures
 	queue_redraw()
 
 
 func clear_selection() -> void:
-	show_selection(Vector2i(-1, -1), [])
+	show_selection(Vector2i(-1, -1), [], [])
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -132,8 +138,15 @@ func _draw_selection() -> void:
 
 	for cell: Vector2i in destination_cells:
 		var rect := cell_rect(cell)
-		draw_rect(rect, Color(DESTINATION_COLOR, 0.40))
-		draw_circle(rect.get_center(), cell_size * 0.13, Color(DESTINATION_COLOR, 0.95))
+		var is_capture := capture_cells.has(cell)
+		var color := CAPTURE_COLOR if is_capture else DESTINATION_COLOR
+		draw_rect(rect, Color(color, 0.40))
+		if is_capture:
+			# An outline, because the piece being captured stands on the cell
+			# and would hide a mark drawn at its centre.
+			draw_rect(rect.grow(-3.0), Color(color, 0.95), false, 3.0)
+		else:
+			draw_circle(rect.get_center(), cell_size * 0.13, Color(color, 0.95))
 
 
 func _draw_labels() -> void:
