@@ -1,0 +1,10 @@
+- Player 1 takes the first turn
+- Players alternate turns after every completed move
+- Exactly one piece moves per turn
+- Only the active player's pieces can be selected
+- Clicking a waiting player's piece neither selects it nor changes the turn
+- Capturing by clicking the opponent's piece on a capturing destination still passes the turn
+- Nothing stays selected once the turn changes hands
+- Deselecting or clicking a cell that is not a destination leaves the turn with the active player
+- Turn indicator naming the player to move, distinguishing the two players
+- Status line explaining a click on a piece belonging to the waiting player
