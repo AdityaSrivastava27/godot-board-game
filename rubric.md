@@ -1,0 +1,12 @@
+- Game ends the instant a Lion is captured
+- The player who captured the Lion wins
+- No piece can be moved once a result is in
+- Game is drawn when both players are down to their Lion alone
+- Game is drawn when the same position occurs for the third time
+- Game is drawn when 30 consecutive valid moves pass with no capture
+- The no-capture count restarts at zero after every capture
+- A Lion capture is decided before any draw, so taking a Lion that leaves two lone Lions is a win
+- The side to move is part of a position, so the same layout with the other player to move is not a repetition
+- The opening position counts as its own first occurrence
+- Result naming the winning player, or stating the draw, displayed alongside the board
+- Turn indicator no longer offering a turn once the game is over
