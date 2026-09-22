@@ -1,18 +1,20 @@
 extends Control
 
-## Builds the board, places the six pieces on their starting cells and lets a
-## piece be picked up and moved according to its movement rule.
+## Builds the board, places the six pieces on their starting cells and runs the
+## game turn by turn.
 ##
-## Click a piece to select it; its legal destinations are marked on the board,
-## with the ones that would capture an opponent's piece outlined in red.
-## Click a destination to move there, or click anywhere else to deselect.
+## Rule 7 - Player 1 takes the first turn and the players then alternate. On a
+## turn the active player clicks one of their own pieces to select it; its legal
+## destinations are marked on the board, with the ones that would capture an
+## opponent's piece outlined in red. Clicking a destination completes the move
+## and hands the turn to the other player; clicking anywhere else puts the piece
+## back down and the turn carries on.
 ##
 ## A Snake carries the direction of its last step, so the cells offered to it
 ## change after every move it makes.
 ##
-## The specification defines movement, blocking and capture only, so there is
-## deliberately no turn order or win condition here: any piece may be moved at
-## any time.
+## The specification stops at turn order, so there is deliberately no win
+## condition here: the two players simply keep alternating.
 
 const BACKGROUND := Color("#241a12")
 const HEADING_COLOR := Color("#f3e7cd")
@@ -20,11 +22,14 @@ const NOTE_COLOR := Color("#b39d7d")
 const MOVE_DURATION := 0.16
 
 var _board: BoardView
+var _turn: Label
 var _status: Label
 var _selected: PieceView = null
 var _destinations: Array[Vector2i] = []
 ## Cell -> PieceView for every piece on the board.
 var _occupancy := {}
+## Rule 7 - the player whose turn it is; only their pieces may be picked up.
+var _active_player: int = BoardData.Player.PLAYER_1
 
 
 func _ready() -> void:
@@ -44,6 +49,11 @@ func _ready() -> void:
 	center.add_child(column)
 
 	column.add_child(_make_label("6 × 6 Board", 26, HEADING_COLOR))
+
+	# Rule 7 - whose turn it is is the one piece of state the grid itself cannot
+	# show, so it is named above the board and tinted in that player's colour.
+	_turn = _make_label("", 19, HEADING_COLOR)
+	column.add_child(_turn)
 
 	_board = BoardView.new()
 	_board.cell_size = 92.0
@@ -72,6 +82,8 @@ func _ready() -> void:
 		)
 	)
 
+	# Rule 7 - Player 1 takes the first turn.
+	_begin_turn(BoardData.Player.PLAYER_1)
 	_clear_selection()
 
 
@@ -103,9 +115,21 @@ func _on_piece_picked(piece: PieceView) -> void:
 	# A capturing click never reaches _on_cell_clicked: the piece being taken
 	# covers its cell and consumes the event, so the capture has to be recognised
 	# here too. Anything standing on a destination is an opponent, because
-	# legal_destinations() has already dropped the mover's own pieces.
+	# legal_destinations() has already dropped the mover's own pieces - which is
+	# also why this runs ahead of the ownership check below, whose whole job is
+	# to turn clicks on the waiting player's pieces away.
 	if _selected != null and _destinations.has(piece.coordinate):
 		_move_selected_to(piece.coordinate)
+		return
+	# Rule 7 - only the active player may pick a piece up. Any other click on a
+	# piece is treated like a click on a cell that is not a destination.
+	if piece.player != _active_player:
+		_clear_selection()
+		_status.text = "That %s is %s's — it is %s's turn." % [
+			BoardData.kind_name(piece.kind),
+			BoardData.player_name(piece.player),
+			BoardData.player_name(_active_player),
+		]
 		return
 	_select(piece)
 
@@ -119,6 +143,8 @@ func _on_cell_clicked(coordinate: Vector2i) -> void:
 		_clear_selection()
 
 
+## Pick `piece` up and mark where it may go. Rule 7 - the caller has already
+## established that the piece belongs to the active player.
 func _select(piece: PieceView) -> void:
 	_selected = piece
 	_destinations = MovementRules.legal_destinations(
@@ -185,6 +211,11 @@ func _move_selected_to(coordinate: Vector2i) -> void:
 			BoardData.kind_name(captured.kind),
 		]
 
+	# Rule 7 - the move is complete, so the turn passes to the other player. The
+	# status line goes on describing the move that was just made; the label above
+	# the board is what announces the handover.
+	_begin_turn(_opponent_of(piece.player))
+
 
 ## Rule 5 - a captured piece leaves the board. It fades out over the same beat as
 ## the move, so the two read as one action.
@@ -195,11 +226,33 @@ func _remove_captured(piece: PieceView) -> void:
 	fade.tween_callback(piece.queue_free)
 
 
+## Rule 7 - hand the turn to `player`, who becomes the only side that can pick a
+## piece up. The status line is deliberately left alone so that a message about
+## the move which caused the handover survives it.
+func _begin_turn(player: int) -> void:
+	_active_player = player
+	_turn.text = "%s's turn" % BoardData.player_name(_active_player)
+	var color := (
+		PieceView.PLAYER_1_BODY
+		if _active_player == BoardData.Player.PLAYER_1
+		else PieceView.PLAYER_2_BODY
+	)
+	_turn.add_theme_color_override("font_color", color)
+
+
+static func _opponent_of(player: int) -> int:
+	if player == BoardData.Player.PLAYER_1:
+		return BoardData.Player.PLAYER_2
+	return BoardData.Player.PLAYER_1
+
+
 func _clear_selection() -> void:
 	_selected = null
 	_destinations = []
 	_board.clear_selection()
-	_status.text = "Click a piece to see where it can move."
+	_status.text = (
+		"%s to move — click one of your pieces." % BoardData.player_name(_active_player)
+	)
 
 
 func _cell_list(cells: Array[Vector2i]) -> String:
